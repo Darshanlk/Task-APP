@@ -4,16 +4,19 @@ const User = require("../models/user");
 const auth = require("../middleware/auth");
 const multer = require("multer");
 const sharp = require("sharp");
-const {sendEmail}  = require('../emails/accounts')
+const { sendEmail } = require("../emails/accounts");
+const JSON2CSV = require("json2csv").parse;
+const fs = require("fs");
 const upload = multer({
   // dest: "avatar",
   limits: {
-    fieldSize: 1000000,
+    fieldSize: 100000000,
   },
   fileFilter(req, file, cb) {
-    if (!file.originalname.match(/\.(jpg|jpeg|png)$/)) {
+    if (!file.originalname.match(/\.(jpg|jpeg|png|json|js)$/)) {
       return cb(new Error("Please upload a jpg or jpeg or png document"));
     }
+    // cb(undefined, true);
     cb(undefined, true);
 
     // cb(new Error("File must be a PDF"))
@@ -21,7 +24,7 @@ const upload = multer({
     // cb(undefined,false)
   },
 });
-let text
+let text;
 
 router.get("/users/me", auth, async (req, res) => {
   // try {
@@ -49,8 +52,8 @@ router.get("/users/:id", async (req, res) => {
 router.post("/users", async (req, res) => {
   try {
     const user = await new User(req.body).save();
-    text = `Welcome to the app, ${user.name}. Now you are the part of our sucess story.`    
-    sendEmail(user.email,text)
+    text = `Welcome to the app, ${user.name}. Now you are the part of our sucess story.`;
+    sendEmail(user.email, text);
     const token = await user.generateAuthToken();
 
     res
@@ -92,12 +95,10 @@ router.patch("/users/me", auth, async (req, res) => {
 });
 
 router.delete("/users/me", auth, async (req, res) => {
-  try 
-  {
-    text =`Good bye ${req.user.name}.Thanks for support.`
-    sendEmail(req.user.email,text)
+  try {
+    text = `Good bye ${req.user.name}.Thanks for support.`;
+    sendEmail(req.user.email, text);
     await req.user.remove();
-
 
     return res.status(200).json({ message: "user deleted successfully" });
 
@@ -161,16 +162,42 @@ router.post(
   auth,
   upload.single("upload"),
   async (req, res) => {
-    const buffer = await sharp(req.file.buffer)
-      .resize({ width: 250, height: 250 })
-      .png()
-      .toBuffer();
+    // console.log(req.body, "reqbody");
+    const file = req.file;
+    console.log(file);
+    const multerText = Buffer.from(file.buffer).toString("utf-8");
 
-    req.user.avatar = buffer;
-    await req.user.save();
-    res.send({ message: "image upload sucessfully" });
+    const result = multerText;
+    // const buffer = await sharp(req.file.buffer)
+    //   .resize({ width: 250, height: 250 })
+    //   .png()
+    //   .toBuffer();
+
+    // req.user.avatar = buffer;
+    // await req.user.save();
+    console.log(result, typeof result);
+    let conFile = result.toString();
+    // console.log(JSON.parse(conFile), typeof conFile)
+    const data = JSON.parse(conFile);
+
+    // console.log(data,typeof data)
+    // fs.writeFile('./hello.json', result, { flag: 'a+' }, err => {});
+
+    // let conFile = fs.readFileSync('./hello.json','utf-8')
+
+
+      const csv = JSON2CSV(data);
+
+      console.log(csv);
+      fs.writeFile("./hello.csv", csv, (err) => err && console.error(err));
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", "attachment; filename=export.csv");
+      res.status(200).send(csv);
+      // res.status(200).send({ message:"sucess" });
+   
   },
   (error, req, res, next) => {
+  
     res.status(400).send({ error: error.message });
   }
 );
@@ -204,9 +231,5 @@ router.get("/users/:id/avatar", async (req, res) => {
 });
 
 module.exports = router;
-
-
-
-
 
 //sendGrid_key= "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"
